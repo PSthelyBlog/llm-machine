@@ -10,6 +10,7 @@ let
   llm-install = pkgs.writeShellApplication {
     name = "llm-install";
     runtimeInputs = with pkgs; [
+      ckbcomp
       coreutils
       curl
       gawk

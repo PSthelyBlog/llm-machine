@@ -25,21 +25,32 @@ trap 'fail "unexpected error at line $LINENO"' ERR
 
 # --- Keyboard ----------------------------------------------------------------------
 
-declare -A KEYMAPS=(
-  ["English (US)"]=us ["English (UK)"]=uk ["French"]=fr ["German"]=de ["Spanish"]=es
-  ["Italian"]=it ["Portuguese"]=pt-latin1 ["Brazilian (ABNT2)"]=br-abnt2
-  ["Belgian"]=be-latin1 ["Swiss French"]=fr_CH ["Swiss German"]=de_CH-latin1
-  ["Canadian French"]=cf ["Dutch"]=nl ["Swedish"]=sv-latin1 ["Norwegian"]=no
-  ["Danish"]=dk ["Finnish"]="fi" ["Polish"]=pl ["Russian"]=ru ["Japanese"]=jp106
-  ["English (US, Dvorak)"]=dvorak ["English (US, Colemak)"]=colemak
+# Each is an xkb layout, and a variant if needed: what desktops use, and what the console
+# follows (console.useXkbConfig). kbd's own console maps aren't used: some are wrong, and
+# its "fr" types { } @ instead of é è à.
+declare -A KEYBOARDS=(
+  ["English (US)"]=us ["English (UK)"]=gb ["French"]=fr ["German"]=de ["Spanish"]=es
+  ["Italian"]=it ["Portuguese"]=pt ["Brazilian (ABNT2)"]=br ["Belgian"]=be
+  ["Swiss French"]="ch fr" ["Swiss German"]=ch ["Canadian French"]=ca ["Dutch"]=nl
+  ["Swedish"]=se ["Norwegian"]=no ["Danish"]=dk ["Finnish"]="fi" ["Polish"]=pl
+  ["Russian"]="us,ru" ["Japanese"]=jp
+  ["English (US, Dvorak)"]="us dvorak" ["English (US, Colemak)"]="us colemak"
 )
 
 title "This puts llm-machine on this computer. It takes a few minutes; after a" \
   "restart, Claude takes over and sets up the rest with you."
 say "Which keyboard layout do you use?"
-keyboard=$(printf '%s\n' "${!KEYMAPS[@]}" | sort | gum choose --height 12 --selected "English (US)")
-keymap=${KEYMAPS[$keyboard]}
-loadkeys "$keymap"
+keyboard=$(printf '%s\n' "${!KEYBOARDS[@]}" | sort | gum choose --height 12 --selected "English (US)")
+read -r xkb_layout xkb_variant <<<"${KEYBOARDS[$keyboard]}"
+xkb_options=terminate:ctrl_alt_bksp # the NixOS default
+# With two layouts, Alt+Shift switches between them.
+[[ "$xkb_layout" != *,* ]] || xkb_options="grp:alt_shift_toggle,$xkb_options"
+# Build the console map the way NixOS builds it from the same settings
+# (nixos/modules/config/console.nix), so a disk passphrase typed now is typed the same
+# way at boot.
+ckbcomp -model pc104 -layout "$xkb_layout" -variant "$xkb_variant" -option "$xkb_options" \
+  > /tmp/keymap.map
+loadkeys -q /tmp/keymap.map
 
 # --- Network -----------------------------------------------------------------------
 
@@ -149,9 +160,15 @@ rm -rf "$repo/hosts/llm-vm"
 mkdir -p "$hostdir"
 cp /tmp/disk.nix "$hostdir/disk.nix"
 nixos-generate-config --root "$MNT" --no-filesystems --show-hardware-config > "$hostdir/hardware-configuration.nix"
-early_setup=""
-[ "$layout" = btrfs ] || early_setup='
-  console.earlySetup = true; # the disk passphrase is typed with this layout'
+keyboard_config="services.xserver.xkb.layout = \"$xkb_layout\";"
+[ -z "$xkb_variant" ] || keyboard_config+="
+  services.xserver.xkb.variant = \"$xkb_variant\";"
+[ "$xkb_options" = terminate:ctrl_alt_bksp ] || keyboard_config+="
+  services.xserver.xkb.options = \"$xkb_options\";"
+keyboard_config+="
+  console.useXkbConfig = true; # the console follows the keyboard layout above"
+[ "$layout" = btrfs ] || keyboard_config+="
+  console.earlySetup = true; # the disk passphrase is typed with this layout"
 cat > "$hostdir/default.nix" <<EOF
 # This machine. The installer wrote this file; Claude looks after it.
 { ... }:
@@ -164,7 +181,7 @@ cat > "$hostdir/default.nix" <<EOF
   llm-machine.user = "$username";
   users.users."$username".description = "$fullname";
 
-  console.keyMap = "$keymap";$early_setup
+  $keyboard_config
 
   boot.loader.systemd-boot.enable = true;
   boot.loader.efi.canTouchEfiVariables = true;

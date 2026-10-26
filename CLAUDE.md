@@ -28,6 +28,9 @@ sessions here, so don't follow them (for example, sudo is fine on the dev host).
   asks before `osctl try`/`confirm`/`rollback` in auto mode. Uses the host's signed-in
   Claude (four small Sonnet requests); the NixOS tests can't cover this.
 - `python3 dev/qmp.py .vm/qmp-vm.sock screenshot /tmp/s.png`, `... type 'text\n'`, `... paste` (the host clipboard), `... key ctrl-alt-f2`.
+  `type` assumes a US layout in the VM; once its keyboard is French, set `QMP_KEYMAP=fr`.
+- `dev/test-install.sh [--encrypt] [--french]`: an unattended install from the ISO onto
+  `.vm/install.qcow2`, then the first boot, with screenshots in `.vm/`.
 - Signing in inside a VM: both VMs forward port 8765, so the phone sign-in page from the
   QR code (`zbarimg -q --raw` on a screenshot) opens on the host at
   `http://localhost:8765/<token>`; the code itself shows the VM's address, 10.0.2.15.

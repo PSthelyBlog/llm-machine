@@ -5,9 +5,12 @@ usage: qmp.py SOCKET screenshot OUT.png
        qmp.py SOCKET type TEXT          (\\n presses Enter; assumes a US layout in the VM)
        qmp.py SOCKET paste              (types the host clipboard, without pressing Enter)
        qmp.py SOCKET key COMBO...       (e.g. ret, f2, ctrl-alt-f2, shift-tab)
+
+With QMP_KEYMAP=fr, type and paste assume a French AZERTY layout in the VM instead.
 """
 
 import json
+import os
 import socket
 import subprocess
 import sys
@@ -23,6 +26,21 @@ PLAIN = {
     " ": "spc", "\n": "ret", "\t": "tab", "-": "minus", "=": "equal",
     "[": "bracket_left", "]": "bracket_right", ";": "semicolon", "'": "apostrophe",
     ",": "comma", ".": "dot", "/": "slash", "\\": "backslash", "`": "grave_accent",
+}
+# French AZERTY: each character as the keys at their US positions. Digits need Shift.
+FRENCH = {
+    "a": ("q",), "q": ("a",), "z": ("w",), "w": ("z",), "m": ("semicolon",),
+    " ": ("spc",), "\n": ("ret",), "\t": ("tab",),
+    "&": ("1",), "é": ("2",), '"': ("3",), "'": ("4",), "(": ("5",), "-": ("6",),
+    "è": ("7",), "_": ("8",), "ç": ("9",), "à": ("0",), ")": ("minus",),
+    "=": ("equal",), "+": ("shift", "equal"), "ù": ("apostrophe",),
+    ",": ("m",), ";": ("comma",), ":": ("dot",), "!": ("slash",),
+    "?": ("shift", "m"), ".": ("shift", "comma"), "/": ("shift", "dot"),
+    "$": ("bracket_right",), "*": ("backslash",), "%": ("shift", "apostrophe"),
+    "<": ("less",), ">": ("shift", "less"),
+    "#": ("alt_r", "3"), "{": ("alt_r", "4"), "[": ("alt_r", "5"), "|": ("alt_r", "6"),
+    "\\": ("alt_r", "8"), "@": ("alt_r", "0"), "]": ("alt_r", "minus"),
+    "}": ("alt_r", "equal"),
 }
 
 
@@ -54,6 +72,8 @@ class QMP:
 
 
 def keys_for(ch):
+    if os.environ.get("QMP_KEYMAP") == "fr":
+        return french_keys_for(ch)
     if ch.isascii() and ch.isalpha():
         return ("shift", ch.lower()) if ch.isupper() else (ch,)
     if ch.isdigit():
@@ -63,6 +83,17 @@ def keys_for(ch):
     if ch in SHIFTED:
         return ("shift", SHIFTED[ch])
     raise SystemExit(f"can't type {ch!r}")
+
+
+def french_keys_for(ch):
+    if ch.isdigit():
+        return ("shift", ch)
+    if ch.isascii() and ch.isalpha():
+        keys = FRENCH.get(ch.lower(), (ch.lower(),))
+        return ("shift",) + keys if ch.isupper() else keys
+    if ch in FRENCH:
+        return FRENCH[ch]
+    raise SystemExit(f"can't type {ch!r} on a French keyboard")
 
 
 def clipboard():

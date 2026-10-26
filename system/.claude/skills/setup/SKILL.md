@@ -52,8 +52,8 @@ you decided for each, in plain words.
 
 One `AskUserQuestion` round, recommending defaults from the survey:
 
-1. **Language and region:** locale and timezone. Guess from `console.keyMap` in
-   `hosts/<hostname>/default.nix`.
+1. **Language and region:** locale and timezone. Guess from the keyboard layout chosen
+   in the installer, `services.xserver.xkb.layout` in `hosts/<hostname>/default.nix`.
 2. **Desktop:** GNOME (recommended for newcomers), KDE Plasma (looks like Windows),
    Hyprland (tiling, keyboard-driven), or none (console only).
 3. **Use** (multi-select): web and email, office documents, programming, gaming, photos
@@ -65,9 +65,12 @@ Ask more only if an answer leaves something important open.
 
 ## 4. Apply in stages, each on trial
 
-**Stage A: language, region and hardware (no reboot).** Put `time.timeZone`,
-`i18n.defaultLocale`, `console.keyMap` and `services.xserver.xkb.layout` in
-`hosts/<hostname>/default.nix`. Put drivers, Bluetooth and power in `features/hardware/`,
+**Stage A: language, region and hardware (no reboot).** Put `time.timeZone` and
+`i18n.defaultLocale` in `hosts/<hostname>/default.nix`. The keyboard is already there,
+from the installer: change `services.xserver.xkb.layout` only if the user asks, and leave
+the console following it (`console.useXkbConfig = true`) rather than setting
+`console.keyMap`, because some of kbd's own console maps are wrong (its `fr` types
+`{ } @` instead of `é è à`). Put drivers, Bluetooth and power in `features/hardware/`,
 and printing (`services.printing.enable`, `services.avahi`) in `features/printing/` if the
 user asked for it. Then `osctl build`, `osctl diff`, `osctl try -m "..."`. Have the user
 check something concrete (`date` shows the right time), then `osctl confirm`.
