@@ -38,9 +38,8 @@ while true; do
 
   watcher=""
   if ! signed_in && [ -n "${TMUX:-}" ]; then
-    echo "   Next, sign in to Claude. When the sign-in link appears, it is also shown as a"
-    echo "   QR code: scan it with your phone, approve, and type the code you get back here."
-    echo "   (F4 shows the QR code again.)"
+    echo "   Next, sign in to Claude. A QR code appears for your phone: scan it and follow"
+    echo "   the steps there. (F4 shows the QR code again.)"
     sleep 4
     llm-login-qr --watch &
     watcher=$!

@@ -51,7 +51,10 @@
         };
       };
 
-      checks.x86_64-linux.osctl = import ./tests/osctl.nix { inherit pkgs machine; };
+      checks.x86_64-linux = {
+        osctl = import ./tests/osctl.nix { inherit pkgs machine; };
+        session = import ./tests/session.nix { inherit pkgs machine; };
+      };
 
       devShells.x86_64-linux.default = pkgs.mkShell {
         packages = [

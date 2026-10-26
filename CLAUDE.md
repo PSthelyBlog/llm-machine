@@ -25,6 +25,9 @@ sessions here, so don't follow them (for example, sudo is fine on the dev host).
 - `nix run .#iso-vm -- [--reset] [--disk-only] [--headless]`: UEFI install onto
   `.vm/install.qcow2`.
 - `python3 dev/qmp.py .vm/qmp-vm.sock screenshot /tmp/s.png`, `... type 'text\n'`, `... paste` (the host clipboard), `... key ctrl-alt-f2`.
+- Signing in inside a VM: both VMs forward port 8765, so the phone sign-in page from the
+  QR code (`zbarimg -q --raw` on a screenshot) opens on the host at
+  `http://localhost:8765/<token>`; the code itself shows the VM's address, 10.0.2.15.
 
 ## Notes
 

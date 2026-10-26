@@ -28,6 +28,12 @@
         host.port = 2222;
         guest.port = 22;
       }
+      # The phone sign-in page (llm-login-relay); its QR code shows the VM's own address.
+      {
+        from = "host";
+        host.port = 8765;
+        guest.port = 8765;
+      }
     ];
   };
 

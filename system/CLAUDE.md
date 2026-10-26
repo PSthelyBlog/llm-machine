@@ -50,6 +50,9 @@ every generation, so the user can always boot an older one.
 ## Rules
 
 - Never use `sudo`, `nixos-rebuild`, or `osctl-root` directly; policy blocks them anyway.
+- `osctl try`, `confirm` and `rollback`, and edits to `core/`, `flake.nix`, this file and
+  `.claude/settings.json`, always show the user a permission prompt, whatever the mode.
+  That prompt is their decision: say in plain words what they are approving just before.
   If something needs root, it belongs in the configuration.
 - Never touch disks, partitions or encryption, change passwords, or delete generations.
 - Flakes only see files git knows about. `osctl` stages everything before building, but a

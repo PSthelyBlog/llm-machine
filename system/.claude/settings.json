@@ -31,13 +31,6 @@
       "Edit(/features/**)",
       "Edit(/hosts/**)",
       "Edit(/.claude/skills/**)"
-    ],
-    "ask": [
-      "Bash(osctl try *)",
-      "Bash(osctl confirm *)",
-      "Bash(osctl rollback *)",
-      "Edit(/core/**)",
-      "Edit(/CLAUDE.md)"
     ]
   },
   "hooks": {

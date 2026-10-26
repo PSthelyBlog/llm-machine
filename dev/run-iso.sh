@@ -30,7 +30,7 @@ args=(
   -drive "if=pflash,format=raw,file=$vars"
   -drive "file=$disk,if=none,id=disk0,format=qcow2"
   -device "virtio-blk-pci,drive=disk0,serial=llm-disk0,bootindex=1"
-  -nic "user,model=virtio-net-pci"
+  -nic "user,model=virtio-net-pci,hostfwd=tcp::8765-:8765" # the phone sign-in page
   -qmp "unix:$dir/qmp-install.sock,server=on,wait=off"
   -serial "file:$dir/serial-install.log"
   "${display[@]}"

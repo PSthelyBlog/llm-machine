@@ -7,14 +7,21 @@
 let
   cfg = config.llm-machine;
 
+  # Where a phone hands the sign-in code over (llm-login-relay).
+  relayPort = 8765;
+
   script =
     name: runtimeInputs:
     pkgs.writeShellApplication {
       inherit name runtimeInputs;
       text =
         builtins.replaceStrings
-          [ "@tmuxConf@" "@terminal@" ]
-          [ "${./pkgs/tmux.conf}" (toString cfg.session.terminal) ]
+          [ "@tmuxConf@" "@terminal@" "@relayPort@" ]
+          [
+            "${./pkgs/tmux.conf}"
+            (toString cfg.session.terminal)
+            (lib.optionalString cfg.session.phoneSignIn (toString relayPort))
+          ]
           (builtins.readFile ./pkgs/${name}.sh);
     };
 
@@ -29,7 +36,11 @@ let
     pkgs.qrencode
     pkgs.tmux
     pkgs.ncurses
+    login-relay
   ];
+  login-relay = pkgs.writers.writePython3Bin "llm-login-relay" {
+    flakeIgnore = [ "E501" ];
+  } (builtins.readFile ./pkgs/llm-login-relay.py);
   session = script "llm-session" [
     pkgs.tmux
     front-door
@@ -60,6 +71,16 @@ in
       default = true;
       description = "Log the primary user in on tty1 automatically, once per boot.";
     };
+    phoneSignIn = lib.mkOption {
+      type = lib.types.bool;
+      default = true;
+      description = ''
+        While Claude waits for its sign-in code on tty1, serve a page on the local network
+        (TCP port ${toString relayPort}, at a secret address shown as a QR code) where a
+        phone can hand the code over, so it doesn't have to be typed. Nothing listens on
+        the port at any other time.
+      '';
+    };
     terminal = lib.mkOption {
       type = lib.types.nullOr lib.types.str;
       default = null;
@@ -84,7 +105,9 @@ in
       environment.systemPackages = [
         session
         login-qr
-      ];
+      ]
+      ++ lib.optional cfg.session.phoneSignIn login-relay;
+      networking.firewall.allowedTCPPorts = lib.optional cfg.session.phoneSignIn relayPort;
       services.getty = lib.mkIf cfg.session.autologin {
         autologinUser = cfg.user;
         autologinOnce = true;

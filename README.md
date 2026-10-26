@@ -6,7 +6,8 @@ An operating system that Claude Code sets up and maintains.
 firmware → systemd-boot (every generation listed: rollback without Claude)
   → NixOS → autologin on tty1 → tmux: F1 Claude │ F2 shell │ F3 network │ F4 sign-in QR
        ├─ offline?          → network settings (nmtui)
-       ├─ not signed in?    → Claude's login; the sign-in link pops up as a QR code
+       ├─ not signed in?    → Claude's login: a QR code opens a page on the phone that
+       │                      hands the sign-in code back, so nothing has to be typed
        ├─ first boot?       → claude "/setup": hardware survey, a few questions, then
        │                      drivers, language, desktop and apps, each applied on trial
        └─ afterwards        → ask Claude for anything; it edits the system repo
@@ -25,9 +26,14 @@ machine by editing that repo and running `osctl`:
 | `osctl revert` / `rollback` | undo the trial / go back a generation, with the repo matching |
 
 Claude runs as the user. Only `osctl-root`, which activates built systems and nothing
-else, runs as root. A machine-wide Claude Code policy (`/etc/claude-code/managed-settings.json`)
-blocks `sudo`, disk tools and bypass mode, and project settings make `osctl try` and
-`confirm` ask before running.
+else, runs as root. A machine-wide Claude Code policy (`/etc/claude-code/managed-settings.json`),
+which Claude can't edit, starts Claude in auto mode, blocks `sudo`, disk tools and bypass
+mode, and makes `osctl try`, `confirm` and `rollback`, and edits to `core/`, always ask
+the user, in every mode.
+
+During sign-in, the tty1 session serves the phone page on TCP port 8765 at a secret
+address, and accepts only a code for the sign-in on screen; nothing listens there
+otherwise. `llm-machine.session.phoneSignIn = false` turns it off.
 
 ## Try it
 
