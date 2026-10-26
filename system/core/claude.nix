@@ -21,6 +21,7 @@ in
         "Bash(osctl try *)"
         "Bash(osctl confirm *)"
         "Bash(osctl rollback *)"
+        "Bash(osctl upgrade *)"
         "Edit(${repo}/core/**)"
         "Edit(${repo}/flake.nix)"
         "Edit(${repo}/CLAUDE.md)"

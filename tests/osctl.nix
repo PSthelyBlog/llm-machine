@@ -1,6 +1,10 @@
 # The trial mechanics of osctl-root: a change on trial is reverted when its timer runs
-# out, kept when confirmed, and undone by rollback. Run with: nix build .#checks.x86_64-linux.osctl
+# out, kept when confirmed, and undone by rollback. And osctl upgrade's merging of
+# releases. Run with: nix build .#checks.x86_64-linux.osctl
 { pkgs, machine }:
+let
+  upgradeTest = pkgs.writeShellScript "osctl-upgrade-test" (builtins.readFile ./osctl-upgrade.sh);
+in
 pkgs.testers.runNixOSTest {
   name = "osctl";
 
@@ -63,5 +67,8 @@ pkgs.testers.runNixOSTest {
     with subtest("the primary user may run osctl-root, and nothing else, without a password"):
         machine.succeed("su dev -c 'sudo -n /run/current-system/sw/bin/osctl-root revert'")
         machine.fail("su dev -c 'sudo -n true'")
+
+    with subtest("an upgrade merges a release and keeps the machine's own changes"):
+        machine.succeed("su - dev -c ${upgradeTest}")
   '';
 }

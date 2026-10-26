@@ -9,6 +9,8 @@ PROFILE=/nix/var/nix/profiles/system
 ROOT=(/run/wrappers/bin/sudo -n /run/current-system/sw/bin/osctl-root)
 DEFAULT_TIMEOUT=120
 TRIAL=refs/osctl/trial # the commit on trial, until it is kept or dropped
+UPGRADE_URL=@upgradeUrl@
+UPGRADE_BRANCH=@upgradeBranch@
 
 usage() {
   cat <<'EOF'
@@ -26,6 +28,8 @@ usage: osctl <command> [options]
   revert                   undo the change on trial now
   rollback [-m MESSAGE]    go back to the previous generation and make the repo match it
   log                      generations and the commits they were built from
+  upgrade [URL [BRANCH]]   merge the latest llm-machine release into the repo, to build
+                           and try like any change (default: llm-machine.upgrade.url)
 EOF
 }
 
@@ -48,25 +52,54 @@ check_repo() {
   mkdir -p "$STATE"
 }
 
+# Flakes only see files git knows about, so stage everything; but not a file an upgrade
+# left in conflict, which would build with git's conflict markers in it.
+stage() {
+  local conflicted f
+  conflicted=$(git_ diff --name-only --diff-filter=U | while read -r f; do
+    ! grep -qE '^(<<<<<<<|>>>>>>>)( |$)' "$REPO/$f" 2> /dev/null || echo "  $f"
+  done)
+  [ -z "$conflicted" ] || die "these files still have conflict markers from 'osctl upgrade':
+$conflicted"
+  git_ add -A
+}
+
 # Build ATTR from the work tree, or from exactly COMMIT, so that the system records the
-# commit it was built from. Flakes only see files git knows about, so stage everything.
+# commit it was built from.
 build_attr() { # ATTR [COMMIT]
   local src=$REPO
   check_repo
-  git_ add -A
+  stage
   [ -z "${2:-}" ] || src="git+file://$REPO?rev=$2"
   nix build "$src#nixosConfigurations.$HOST.config.system.build.$1" \
     --out-link "$STATE/$1" --print-out-paths
 }
 
-# A commit of an exact tree on top of HEAD; later edits stay uncommitted in the work tree.
-new_commit() {
-  local tree=$1 msg=$2
-  if [ -z "$(git_ config user.email || true)" ]; then
-    git_ config user.name "${USER:-llm-machine}"
-    git_ config user.email "${USER:-root}@$HOST"
-  fi
-  git_ commit-tree "$tree" -p HEAD -m "$msg"
+identity() {
+  [ -z "$(git_ config user.email || true)" ] || return 0
+  git_ config user.name "${USER:-llm-machine}"
+  git_ config user.email "${USER:-root}@$HOST"
+}
+
+# A commit of an exact tree; later edits stay uncommitted in the work tree.
+new_commit() { # TREE MESSAGE [PARENT...] (default: HEAD)
+  local tree=$1 msg=$2 parents=() parent
+  shift 2
+  for parent in "${@:-HEAD}"; do parents+=(-p "$parent"); done
+  identity
+  git_ commit-tree "$tree" "${parents[@]}" -m "$msg"
+}
+
+merging() { git_ rev-parse -q --verify MERGE_HEAD > /dev/null; }
+
+# A release is the system/ directory of llm-machine's own repo, without its hosts/.
+shipped_tree() { # COMMIT
+  local index=$STATE/upgrade-index
+  rm -f "$index"
+  GIT_INDEX_FILE=$index git_ read-tree "$1:system"
+  GIT_INDEX_FILE=$index git_ rm -r -q --cached --ignore-unmatch hosts
+  GIT_INDEX_FILE=$index git_ write-tree
+  rm -f "$index"
 }
 
 commit_tree() {
@@ -104,6 +137,8 @@ cmd_status() {
     echo "Note: generation $(cat /var/lib/osctl/last-boot-revert) was not confirmed after its trial boot and was removed."
   fi
 
+  ! merging 2> /dev/null ||
+    echo "An llm-machine upgrade is merged into the repo: build it, then 'osctl try -m ...' it."
   if [ -n "$(git_ status --porcelain 2>/dev/null || true)" ]; then
     echo "Repo changes not yet applied and kept:"
     git_ status --porcelain | sed 's/^/  /'
@@ -161,8 +196,8 @@ cmd_try() {
   nothing_pending || die "a change is already on trial: 'osctl confirm' or 'osctl revert' it first"
 
   check_repo
-  git_ add -A
-  local tree commit out
+  stage
+  local tree commit out parents=(HEAD)
   tree=$(git_ write-tree)
   if [ "$tree" = "$(git_ rev-parse -q --verify "$(built_from)^{tree}" 2>/dev/null || true)" ]; then
     echo "The running system was built from these very files: there is nothing to apply."
@@ -170,8 +205,10 @@ cmd_try() {
   fi
   # Commit the change now, beside the branch rather than on it, and build from that
   # commit, so the system records which commit it is. 'osctl confirm' moves main onto it.
+  # An upgrade is committed as the merge it is, so the next one starts from this release.
+  ! merging || parents+=("$(git_ rev-parse MERGE_HEAD)")
   commit=$(git_ rev-parse HEAD)
-  [ "$tree" = "$(git_ rev-parse 'HEAD^{tree}')" ] || commit=$(new_commit "$tree" "$msg")
+  [ "$tree" = "$(git_ rev-parse 'HEAD^{tree}')" ] || commit=$(new_commit "$tree" "$msg" "${parents[@]}")
   git_ update-ref "$TRIAL" "$commit"
   out=$(build_attr toplevel "$commit")
 
@@ -218,6 +255,10 @@ cmd_confirm() {
     commit_tree "$(git_ rev-parse "$trial^{tree}")" "$(git_ log -1 --format=%B "$trial")"
   fi
   git_ update-ref -d "$TRIAL"
+  # An upgrade's merge is finished once its commit is on main.
+  if merging && git_ merge-base --is-ancestor MERGE_HEAD HEAD; then
+    git_ merge --quit
+  fi
   git_ tag -f "gen-$gen" >/dev/null
   echo "Kept as generation $gen (commit $(git_ rev-parse --short HEAD))."
   return "$rc"
@@ -230,7 +271,55 @@ cmd_revert() {
   }
   "${ROOT[@]}" revert
   git_ update-ref -d "$TRIAL"
-  echo "The repo edits are still there, uncommitted: fix them and try again, or set them aside with 'git -C $REPO stash'."
+  if merging; then
+    echo "The upgrade is still merged into the repo: fix it and try again, or drop it with 'git -C $REPO merge --abort'."
+  else
+    echo "The repo edits are still there, uncommitted: fix them and try again, or set them aside with 'git -C $REPO stash'."
+  fi
+}
+
+cmd_upgrade() {
+  local url=${1:-$UPGRADE_URL} branch=${2:-$UPGRADE_BRANCH}
+  [ -n "$url" ] || die "upgrade: no upgrade source is set (llm-machine.upgrade.url); give one: osctl upgrade URL [BRANCH]"
+  nothing_pending || die "a change is on trial: 'osctl confirm' or 'osctl revert' it first"
+  check_repo
+  git_ rev-parse -q --verify refs/heads/upstream > /dev/null ||
+    die "this repo has no 'upstream' branch of llm-machine releases to upgrade from: it was installed before upgrades existed"
+  [ -z "$(git_ status --porcelain)" ] ||
+    die "the repo has changes that aren't kept yet: try and confirm them, or set them aside, before upgrading"
+
+  echo "Fetching $branch from $url..."
+  git_ fetch -q --no-tags "$url" "$branch" || die "could not fetch $branch from $url"
+  local fetched release tree
+  fetched=$(git_ rev-parse FETCH_HEAD)
+  release=$(git_ rev-parse --short "$fetched")
+  tree=$(shipped_tree "$fetched")
+  # The 'upstream' branch holds the releases this machine has taken, one commit each.
+  if [ "$tree" != "$(git_ rev-parse 'upstream^{tree}')" ]; then
+    git_ update-ref refs/heads/upstream \
+      "$(new_commit "$tree" "llm-machine $release from $url" upstream)"
+  elif git_ merge-base --is-ancestor upstream HEAD; then
+    echo "This machine already has the latest llm-machine ($release)."
+    return 0
+  fi
+
+  local out
+  if ! out=$(git_ merge -q --no-commit --no-ff upstream 2>&1); then
+    merging || die "could not merge llm-machine $release: $out"
+    echo "llm-machine $release changes some of the same lines as this machine did, in:"
+    git_ diff --name-only --diff-filter=U | sed 's/^/  /'
+    die "edit them to keep what both meant, removing the conflict markers, then build and try as usual; or drop the upgrade with: git -C $REPO merge --abort"
+  fi
+  if git_ diff --cached --quiet HEAD; then
+    # Nothing changes for this machine: record the release as taken, and that's all.
+    identity
+    git_ commit -q -m "Take llm-machine $release (nothing changes on this machine)"
+    echo "llm-machine $release changes nothing on this machine; it is recorded as taken."
+    return 0
+  fi
+  echo "Merged llm-machine $release into the repo:"
+  git_ --no-pager diff --cached --stat HEAD
+  echo "Nothing on the system has changed yet: build it, look at 'osctl diff', then 'osctl try -m ...' it like any change."
 }
 
 cmd_rollback() {
@@ -336,6 +425,7 @@ case "$cmd" in
   revert) cmd_revert ;;
   rollback) cmd_rollback "$@" ;;
   log) cmd_log ;;
+  upgrade) cmd_upgrade "$@" ;;
   "" | -h | --help | help) usage ;;
   *)
     usage >&2

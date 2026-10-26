@@ -47,11 +47,24 @@ them with `osctl`. Nothing else changes the system.
 `osctl rollback` goes back one generation and makes the repo match. The boot menu lists
 every generation, so the user can always boot an older one.
 
+## Upgrading llm-machine
+
+`core/`, this file, the shipped skills and `flake.lock` come from llm-machine's own
+releases. The `upstream` branch holds the releases this machine has taken. When the user
+wants the newest one, `osctl upgrade` (with a URL if `llm-machine.upgrade.url` isn't set)
+merges it into the repo, keeping this machine's own changes; nothing on the system
+changes until you build, `osctl diff`, `osctl try -m "Upgrade llm-machine ..."` and
+`osctl confirm` as for any change. Tell the user what the release changes before trying
+it. If a release changes the same lines as this machine did, `osctl upgrade` lists the
+files: edit them to keep what both meant, or drop the upgrade with `git merge --abort`.
+Never commit to `upstream` yourself.
+
 ## Rules
 
 - Never use `sudo`, `nixos-rebuild`, or `osctl-root` directly; policy blocks them anyway.
-- `osctl try`, `confirm` and `rollback`, and edits to `core/`, `flake.nix`, this file and
-  `.claude/settings.json`, always show the user a permission prompt, whatever the mode.
+- `osctl try`, `confirm`, `rollback` and `upgrade`, and edits to `core/`, `flake.nix`,
+  this file and `.claude/settings.json`, always show the user a permission prompt, whatever
+  the mode.
   That prompt is their decision: say in plain words what they are approving just before.
   If something needs root, it belongs in the configuration.
 - Never touch disks, partitions or encryption, change passwords, or delete generations.

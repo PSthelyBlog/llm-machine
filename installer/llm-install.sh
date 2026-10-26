@@ -157,6 +157,14 @@ mkdir -p "$repo"
 cp -r "$SRC/." "$repo" # $SRC is a symlink into the store: copy what it points to
 chmod -R u+w "$repo"
 rm -rf "$repo/hosts/llm-vm"
+# The system as shipped, without any machine, is the start of the 'upstream' branch:
+# 'osctl upgrade' adds later releases there and merges them into main.
+git -C "$repo" init -q -b main
+git -C "$repo" config user.name "$fullname"
+git -C "$repo" config user.email "$username@$hostname"
+git -C "$repo" add -A
+git -C "$repo" commit -q -m "llm-machine, as installed"
+git -C "$repo" branch upstream
 mkdir -p "$hostdir"
 cp /tmp/disk.nix "$hostdir/disk.nix"
 nixos-generate-config --root "$MNT" --no-filesystems --show-hardware-config > "$hostdir/hardware-configuration.nix"
@@ -190,9 +198,6 @@ cat > "$hostdir/default.nix" <<EOF
   system.stateVersion = "$(nixos-version | cut -d. -f1,2)";
 }
 EOF
-git -C "$repo" init -q -b main
-git -C "$repo" config user.name "$fullname"
-git -C "$repo" config user.email "$username@$hostname"
 git -C "$repo" add -A
 git -C "$repo" commit -q -m "Install $hostname"
 

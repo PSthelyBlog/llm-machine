@@ -62,6 +62,7 @@ pkgs.testers.runNixOSTest {
         policy = "/etc/claude-code/managed-settings.json"
         machine.succeed(f"jq -e '.permissions.defaultMode == \"auto\"' {policy}")
         machine.succeed(f"jq -e '.permissions.ask | index(\"Bash(osctl try *)\")' {policy}")
+        machine.succeed(f"jq -e '.permissions.ask | index(\"Bash(osctl upgrade *)\")' {policy}")
         machine.succeed(f"jq -e '.permissions.ask | index(\"Edit(//etc/llm-machine/core/**)\")' {policy}")
   '';
 }

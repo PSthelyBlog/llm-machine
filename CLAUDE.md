@@ -31,6 +31,9 @@ sessions here, so don't follow them (for example, sudo is fine on the dev host).
   `type` assumes a US layout in the VM; once its keyboard is French, set `QMP_KEYMAP=fr`.
 - `dev/test-install.sh [--encrypt] [--french]`: an unattended install from the ISO onto
   `.vm/install.qcow2`, then the first boot, with screenshots in `.vm/`.
+- Trying `osctl upgrade` from a VM: `git daemon --listen=127.0.0.1 --export-all
+  --base-path=.. .` serves this repo's commits (not uncommitted work); in the VM,
+  `osctl upgrade git://10.0.2.2/llm-machine main`. Releases are `system/` without `hosts/`.
 - Signing in inside a VM: both VMs forward port 8765, so the phone sign-in page from the
   QR code (`zbarimg -q --raw` on a screenshot) opens on the host at
   `http://localhost:8765/<token>`; the code itself shows the VM's address, 10.0.2.15.

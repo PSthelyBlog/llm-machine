@@ -25,11 +25,12 @@ machine by editing that repo and running `osctl`:
 | `osctl try -m … --reboot` | the same, booting the change once; **the next boot falls back** unless confirmed |
 | `osctl confirm` | keep it: new boot default, and its commit joins `main`, tagged `gen-N` |
 | `osctl revert` / `rollback` | undo the trial / go back a generation, with the repo matching |
+| `osctl upgrade [URL]` | merge the latest llm-machine release (this repo's `system/`) into the machine's repo, keeping its own changes; then try it like any change |
 
 Claude runs as the user. Only `osctl-root`, which activates built systems and nothing
 else, runs as root. A machine-wide Claude Code policy (`/etc/claude-code/managed-settings.json`),
 which Claude can't edit, starts Claude in auto mode, blocks `sudo`, disk tools and bypass
-mode, and makes `osctl try`, `confirm` and `rollback`, and edits to `core/`, always ask
+mode, and makes `osctl try`, `confirm`, `rollback` and `upgrade`, and edits to `core/`, always ask
 the user, in every mode.
 
 During sign-in, the tty1 session serves the phone page on TCP port 8765 at a secret

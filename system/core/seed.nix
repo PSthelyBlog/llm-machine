@@ -29,6 +29,11 @@ in
         git init -q -b main
         git config user.name ${lib.escapeShellArg cfg.user}
         git config user.email ${lib.escapeShellArg "${cfg.user}@${config.networking.hostName}"}
+        # As the installer does: the shipped system without hosts/ starts the 'upstream'
+        # branch, which 'osctl upgrade' merges later releases from.
+        git add -A -- . ':!hosts'
+        git commit -q -m "llm-machine, as seeded"
+        git branch upstream
         git add -A
         git commit -q -m "Initial system"
         chown -R ${lib.escapeShellArg cfg.user}:users ${cfg.repo}
