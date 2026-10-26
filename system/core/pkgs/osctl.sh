@@ -289,7 +289,9 @@ cmd_upgrade() {
     die "the repo has changes that aren't kept yet: try and confirm them, or set them aside, before upgrading"
 
   echo "Fetching $branch from $url..."
-  git_ fetch -q --no-tags "$url" "$branch" || die "could not fetch $branch from $url"
+  # A missing or private repository must fail here, not stop to ask for a password.
+  GIT_TERMINAL_PROMPT=0 git -C "$REPO" fetch -q --no-tags "$url" "$branch" ||
+    die "could not fetch $branch from $url"
   local fetched release tree
   fetched=$(git_ rev-parse FETCH_HEAD)
   release=$(git_ rev-parse --short "$fetched")
