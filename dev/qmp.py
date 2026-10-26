@@ -3,11 +3,13 @@
 
 usage: qmp.py SOCKET screenshot OUT.png
        qmp.py SOCKET type TEXT          (\\n presses Enter; assumes a US layout in the VM)
+       qmp.py SOCKET paste              (types the host clipboard, without pressing Enter)
        qmp.py SOCKET key COMBO...       (e.g. ret, f2, ctrl-alt-f2, shift-tab)
 """
 
 import json
 import socket
+import subprocess
 import sys
 import time
 
@@ -63,6 +65,15 @@ def keys_for(ch):
     raise SystemExit(f"can't type {ch!r}")
 
 
+def clipboard():
+    for cmd in (["wl-paste", "--no-newline"], ["xclip", "-o", "-selection", "clipboard"]):
+        try:
+            return subprocess.run(cmd, capture_output=True, text=True, check=True).stdout
+        except (OSError, subprocess.CalledProcessError):
+            pass
+    raise SystemExit("can't read the clipboard: install wl-clipboard or xclip")
+
+
 def main(argv):
     if len(argv) < 3:
         raise SystemExit(__doc__)
@@ -72,6 +83,9 @@ def main(argv):
         qmp.call("screendump", filename=args[0], format="png")
     elif action == "type":
         for ch in " ".join(args).replace("\\n", "\n"):
+            qmp.keys(*keys_for(ch))
+    elif action == "paste":
+        for ch in clipboard().strip():
             qmp.keys(*keys_for(ch))
     elif action == "key":
         for combo in args:

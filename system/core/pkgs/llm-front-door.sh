@@ -6,6 +6,12 @@ STATE=${XDG_STATE_HOME:-$HOME/.local/state}/llm-machine
 # Any HTTP answer from the API means DNS, routing, TLS and the clock all work.
 online() { [ "$(curl -s -o /dev/null -m 5 -w '%{http_code}' https://api.anthropic.com/ || true)" != 000 ]; }
 signed_in() { [ -s "$HOME/.claude/.credentials.json" ] || [ -n "${ANTHROPIC_API_KEY:-}" ]; }
+# Claude saves a folder's conversations in ~/.claude/projects/<its path, with every
+# character other than a letter or digit turned into ->.
+has_conversation() {
+  local saved=("$HOME/.claude/projects/${PWD//[^a-zA-Z0-9]/-}"/*.jsonl)
+  [ -e "${saved[0]}" ]
+}
 
 banner() {
   clear
@@ -42,16 +48,16 @@ while true; do
 
   cd "$REPO" 2>/dev/null || cd "$HOME"
   mkdir -p "$STATE"
+  # Carry on with the last conversation, unless there is none yet: the computer can
+  # restart before Claude has saved anything, for example during sign-in.
+  resume=()
+  ! has_conversation || resume=(--continue)
   if [ -e /var/lib/osctl/pending-boot ]; then
-    # Back from a trial reboot: continue the conversation that started it.
-    claude --continue "The computer has restarted into the change on trial. Check with me that it works, then keep or undo it, and carry on." || true
+    claude "${resume[@]}" "The computer has restarted into the change on trial. Check with me that it works, then keep or undo it, and carry on." || true
   elif [ -f "$STATE/setup-done" ]; then
     claude || true
-  elif [ -f "$STATE/setup-started" ]; then
-    claude --continue "/setup" || true
   else
-    touch "$STATE/setup-started"
-    claude "/setup" || true
+    claude "${resume[@]}" "/setup" || true
   fi
   [ -z "$watcher" ] || kill "$watcher" 2>/dev/null || true
 

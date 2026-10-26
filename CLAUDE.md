@@ -24,7 +24,7 @@ sessions here, so don't follow them (for example, sudo is fine on the dev host).
   `ssh -p 2222 dev@localhost`, password `dev`.
 - `nix run .#iso-vm -- [--reset] [--disk-only] [--headless]`: UEFI install onto
   `.vm/install.qcow2`.
-- `python3 dev/qmp.py .vm/qmp-vm.sock screenshot /tmp/s.png`, `... type 'text\n'`, `... key ctrl-alt-f2`.
+- `python3 dev/qmp.py .vm/qmp-vm.sock screenshot /tmp/s.png`, `... type 'text\n'`, `... paste` (the host clipboard), `... key ctrl-alt-f2`.
 
 ## Notes
 
