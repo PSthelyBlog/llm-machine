@@ -42,17 +42,19 @@ in
   options.llm-machine.upgrade = {
     url = lib.mkOption {
       type = lib.types.nullOr lib.types.str;
-      default = null;
-      example = "https://github.com/example/llm-machine";
+      default = "https://github.com/PSthelyBlog/llm-machine";
       description = ''
         The git repository of llm-machine itself, whose system/ directory 'osctl upgrade'
-        merges into this machine's repo. Without it, 'osctl upgrade' needs a URL.
+        merges into this machine's repo. When null, 'osctl upgrade' needs a URL.
       '';
     };
     branch = lib.mkOption {
       type = lib.types.str;
-      default = "main";
-      description = "The branch of the upgrade repository that releases are taken from.";
+      default = "stable";
+      description = ''
+        The branch of the upgrade repository that releases are taken from. Development
+        happens on main; stable only moves to commits that passed the checks.
+      '';
     };
   };
 

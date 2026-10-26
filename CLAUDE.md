@@ -38,6 +38,14 @@ sessions here, so don't follow them (for example, sudo is fine on the dev host).
   QR code (`zbarimg -q --raw` on a screenshot) opens on the host at
   `http://localhost:8765/<token>`; the code itself shows the VM's address, 10.0.2.15.
 
+## Releases
+
+Published at https://github.com/PSthelyBlog/llm-machine (public). Installed machines take
+`osctl upgrade` from its `stable` branch, so anything there reaches every machine that
+upgrades. Push work to `main`. Move `stable` only when the user asks, only forward
+(`git push origin <commit>:stable`), and only to a commit that passed `nix flake check`
+and a test install.
+
 ## Notes
 
 - Flakes only see git-tracked files: `git add` new files before building.

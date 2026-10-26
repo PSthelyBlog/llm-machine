@@ -51,8 +51,9 @@ every generation, so the user can always boot an older one.
 
 `core/`, this file, the shipped skills and `flake.lock` come from llm-machine's own
 releases. The `upstream` branch holds the releases this machine has taken. When the user
-wants the newest one, `osctl upgrade` (with a URL if `llm-machine.upgrade.url` isn't set)
-merges it into the repo, keeping this machine's own changes; nothing on the system
+wants the newest one, `osctl upgrade` fetches it (from `llm-machine.upgrade.url`, the
+`stable` branch of llm-machine on GitHub) and merges it into the repo, keeping this
+machine's own changes; nothing on the system
 changes until you build, `osctl diff`, `osctl try -m "Upgrade llm-machine ..."` and
 `osctl confirm` as for any change. Tell the user what the release changes before trying
 it. If a release changes the same lines as this machine did, `osctl upgrade` lists the

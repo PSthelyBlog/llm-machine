@@ -60,3 +60,14 @@ Claude Code itself is fetched from Anthropic at install time and isn't part of t
   `.claude/skills/` are Claude's instructions on the machine.
 - `installer/`: the ISO and `llm-install`.
 - `dev/`: QEMU runners and `qmp.py` (screenshots and typing for automated tests).
+
+## Releases
+
+Installed machines upgrade (`osctl upgrade`) from the `stable` branch of this repository.
+Development happens on `main`; `stable` only moves forward to commits that passed
+`nix flake check` and a test install.
+
+## License
+
+MIT, see [LICENSE](LICENSE). Claude Code is not part of this repository or the ISO: each
+machine downloads it from Anthropic, under Anthropic's terms, when it is built.
