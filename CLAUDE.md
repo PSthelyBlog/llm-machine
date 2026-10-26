@@ -24,6 +24,9 @@ sessions here, so don't follow them (for example, sudo is fine on the dev host).
   `ssh -p 2222 dev@localhost`, password `dev`.
 - `nix run .#iso-vm -- [--reset] [--disk-only] [--headless]`: UEFI install onto
   `.vm/install.qcow2`.
+- `nix run .#check-gates`: after nixpkgs brings a new Claude Code, check that it still
+  asks before `osctl try`/`confirm`/`rollback` in auto mode. Uses the host's signed-in
+  Claude (four small Sonnet requests); the NixOS tests can't cover this.
 - `python3 dev/qmp.py .vm/qmp-vm.sock screenshot /tmp/s.png`, `... type 'text\n'`, `... paste` (the host clipboard), `... key ctrl-alt-f2`.
 - Signing in inside a VM: both VMs forward port 8765, so the phone sign-in page from the
   QR code (`zbarimg -q --raw` on a screenshot) opens on the host at

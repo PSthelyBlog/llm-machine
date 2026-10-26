@@ -28,20 +28,20 @@ them with `osctl`. Nothing else changes the system.
 2. `osctl build`: fix every evaluation or build error before going further.
 3. `osctl diff`: check the package changes are what you expect, and summarise them for
    the user in a sentence or two.
-4. Apply on trial:
-   - `osctl try` activates now and reverts automatically after 120 s (`-t` for longer)
-     unless confirmed. Before running it, tell the user what to check and that it undoes
-     itself if they can't answer.
-   - `osctl try --reboot` is for changes that only take effect on reboot or that would
-     take over the screen: a desktop or display manager, the kernel, the bootloader,
-     drivers, the initrd. The machine reboots into the new generation once; if the user
-     doesn't confirm, the next boot is back on the old one. Tell the user before you run
-     it, because your session ends with the reboot.
+4. Apply on trial, saying in plain words what changed (it becomes the commit message):
+   - `osctl try -m "<what changed>"` activates now and reverts automatically after 120 s
+     (`-t` for longer) unless confirmed. Before running it, tell the user what to check
+     and that it undoes itself if they can't answer.
+   - `osctl try -m "<what changed>" --reboot` is for changes that only take effect on
+     reboot or that would take over the screen: a desktop or display manager, the
+     kernel, the bootloader, drivers, the initrd. The machine reboots into the new
+     generation once; if the user doesn't confirm, the next boot is back on the old one.
+     Tell the user before you run it, because your session ends with the reboot.
    - For risky changes (boot, filesystems, kernel, networking), run `osctl vm --check`
      first.
-5. Ask the user whether it works. If it does, `osctl confirm -m "<what changed, in
-   plain words>"`: that makes it the boot default and commits the repo. If it doesn't,
-   `osctl revert`, then fix it or explain why it can't be done.
+5. Ask the user whether it works. If it does, `osctl confirm`: that makes it the boot
+   default and adds its commit to the repo's history. If it doesn't, `osctl revert`, then
+   fix it or explain why it can't be done.
 
 `osctl status` shows what is running and what is on trial; `osctl log` shows the history;
 `osctl rollback` goes back one generation and makes the repo match. The boot menu lists

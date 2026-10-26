@@ -16,18 +16,18 @@
       };
 
       iso = installer.config.system.build.isoImage;
-      vm = machine.nixosConfigurations.llm-vm.config.system.build.vm;
+      llm-vm = machine.nixosConfigurations.llm-vm;
+      vm = llm-vm.config.system.build.vm;
 
-      app = name: description: replacements: {
+      app = name: description: runtimeInputs: replacements: {
         type = "app";
         meta = { inherit description; };
         program = pkgs.lib.getExe (
           pkgs.writeShellApplication {
-            inherit name;
-            runtimeInputs = [ pkgs.qemu_kvm ];
-            text = builtins.replaceStrings (builtins.attrNames replacements) (builtins.attrValues replacements) (
-              builtins.readFile ./dev/${name}.sh
-            );
+            inherit name runtimeInputs;
+            text =
+              builtins.replaceStrings (builtins.attrNames replacements) (builtins.attrValues replacements)
+                (builtins.readFile ./dev/${name}.sh);
           }
         );
       };
@@ -44,11 +44,20 @@
       };
 
       apps.x86_64-linux = {
-        vm = app "run-vm" "Boot the development machine straight from the build" { "@vm@" = "${vm}"; };
-        iso-vm = app "run-iso" "Install from the ISO onto a blank UEFI virtual disk" {
+        vm = app "run-vm" "Boot the development machine straight from the build" [ pkgs.qemu_kvm ] {
+          "@vm@" = "${vm}";
+        };
+        iso-vm = app "run-iso" "Install from the ISO onto a blank UEFI virtual disk" [ pkgs.qemu_kvm ] {
           "@iso@" = "${iso}";
           "@ovmf@" = "${pkgs.OVMF.fd}";
         };
+        # The machine's own Claude Code and policy, signed in as you on this computer.
+        check-gates =
+          app "check-gates" "Check that Claude Code still asks before osctl in auto mode" [ pkgs.jq ]
+            {
+              "@claude@" = pkgs.lib.getExe llm-vm.pkgs.claude-code;
+              "@policy@" = "${llm-vm.config.environment.etc."claude-code/managed-settings.json".source}";
+            };
       };
 
       checks.x86_64-linux = {

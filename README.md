@@ -20,9 +20,9 @@ machine by editing that repo and running `osctl`:
 | --- | --- |
 | `osctl build` / `diff` | build the repo, show repo and package changes |
 | `osctl vm --check` | boot the change in a throwaway VM first |
-| `osctl try` | activate now; **reverted automatically after 120 s** unless confirmed |
-| `osctl try --reboot` | boot the change once; **the next boot falls back** unless confirmed |
-| `osctl confirm -m …` | keep it: new boot default, plus a git commit tagged `gen-N` |
+| `osctl try -m …` | commit the change beside `main` and activate it; **reverted automatically after 120 s** unless confirmed |
+| `osctl try -m … --reboot` | the same, booting the change once; **the next boot falls back** unless confirmed |
+| `osctl confirm` | keep it: new boot default, and its commit joins `main`, tagged `gen-N` |
 | `osctl revert` / `rollback` | undo the trial / go back a generation, with the repo matching |
 
 Claude runs as the user. Only `osctl-root`, which activates built systems and nothing
@@ -44,6 +44,8 @@ nix run .#vm                 # boot the dev machine straight from the build
 nix run .#iso-vm             # or the real path: UEFI install from the ISO onto a blank disk,
 nix run .#iso-vm -- --disk-only   # then boot the installed system
 nix build .#iso              # the installer image, in result/iso/
+nix flake check              # osctl and session tests in VMs
+nix run .#check-gates        # with your signed-in Claude: osctl still asks in auto mode
 ```
 
 The installer asks only for keyboard, network, disk (optionally encrypted) and account.

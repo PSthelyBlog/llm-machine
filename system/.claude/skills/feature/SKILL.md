@@ -32,11 +32,11 @@ description: Add, change or remove something on this computer, such as software,
 4. **Build and check:** `osctl build` until it passes, then `osctl diff`. Tell the user in
    a sentence or two what will change, including download size if it's large and any
    unfree software.
-5. **Apply on trial.** Use `osctl try`, or `osctl try --reboot` for boot, kernel, driver
-   and desktop changes (see CLAUDE.md). Tell the user what to check and that the change
-   undoes itself if they don't confirm.
-6. **Keep or undo.** If it works, `osctl confirm -m "<what changed, in plain words>"`. If
-   not, `osctl revert`, fix it, and try again. If it can't be done, explain why.
+5. **Apply on trial.** Use `osctl try -m "<what changed, in plain words>"`, adding
+   `--reboot` for boot, kernel, driver and desktop changes (see CLAUDE.md). Tell the user
+   what to check and that the change undoes itself if they don't confirm.
+6. **Keep or undo.** If it works, `osctl confirm`. If not, `osctl revert`, fix it, and
+   try again. If it can't be done, explain why.
 
 User-level settings in the home directory (`~/.config/...`) are not part of the repo. Change
 them only when asked, and tell the user which file you changed.

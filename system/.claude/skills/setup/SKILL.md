@@ -69,8 +69,8 @@ Ask more only if an answer leaves something important open.
 `i18n.defaultLocale`, `console.keyMap` and `services.xserver.xkb.layout` in
 `hosts/<hostname>/default.nix`. Put drivers, Bluetooth and power in `features/hardware/`,
 and printing (`services.printing.enable`, `services.avahi`) in `features/printing/` if the
-user asked for it. Then `osctl build`, `osctl diff`, `osctl try`. Have the user check
-something concrete (`date` shows the right time), then `osctl confirm -m "..."`.
+user asked for it. Then `osctl build`, `osctl diff`, `osctl try -m "..."`. Have the user
+check something concrete (`date` shows the right time), then `osctl confirm`.
 
 **Stage B: desktop and apps (reboot).** Skip this stage if the user chose no desktop.
 
@@ -98,8 +98,8 @@ something concrete (`date` shows the right time), then `osctl confirm -m "..."`.
 `osctl build` and `osctl diff`. Then tell the user: the computer restarts into the new
 desktop; once they log in, you'll open in a terminal and check with them; if anything goes
 wrong, restarting the computer brings it back exactly as it is now. Then
-`osctl try --reboot`. Your session ends there. When you're back (step 0), confirm with
-the user and `osctl confirm -m "..."`.
+`osctl try -m "..." --reboot`. Your session ends there. When you're back (step 0), check
+with the user and `osctl confirm`.
 
 ## 5. Finish
 

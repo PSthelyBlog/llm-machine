@@ -8,21 +8,24 @@ STATE=${XDG_STATE_HOME:-$HOME/.local/state}/osctl
 PROFILE=/nix/var/nix/profiles/system
 ROOT=(/run/wrappers/bin/sudo -n /run/current-system/sw/bin/osctl-root)
 DEFAULT_TIMEOUT=120
+TRIAL=refs/osctl/trial # the commit on trial, until it is kept or dropped
 
 usage() {
   cat <<'EOF'
 usage: osctl <command> [options]
 
-  status [--brief]       what is running, what is on trial, what changed in the repo
-  build                  build the system from the repo without applying it
-  diff                   repo changes and package changes compared with the running system
-  vm [--check]           boot the repo's system in a throwaway VM (--check: headless smoke test)
-  try [-t SECONDS]       apply now on trial; reverted after SECONDS (default 120) unless confirmed
-  try --reboot           for changes that need a reboot: boot them once; reverted unless confirmed
-  confirm [-m MESSAGE]   keep the change on trial: make it the boot default and commit the repo
-  revert                 undo the change on trial now
-  rollback [-m MESSAGE]  go back to the previous generation and make the repo match it
-  log                    generations and the commits they were built from
+  status [--brief]         what is running, what is on trial, what changed in the repo
+  build                    build the system from the repo without applying it
+  diff                     repo changes and package changes compared with the running system
+  vm [--check]             boot the repo's system in a throwaway VM (--check: headless smoke test)
+  try -m MESSAGE [-t SECONDS]
+                           apply the repo's changes now on trial; reverted after SECONDS
+                           (default 120) unless confirmed. MESSAGE says what changed
+  try -m MESSAGE --reboot  for changes that need a reboot: boot them once; reverted unless confirmed
+  confirm                  keep the change on trial: make it the boot default and commit it
+  revert                   undo the change on trial now
+  rollback [-m MESSAGE]    go back to the previous generation and make the repo match it
+  log                      generations and the commits they were built from
 EOF
 }
 
@@ -34,6 +37,7 @@ die() {
 git_() { git -C "$REPO" "$@"; }
 current_gen() { readlink "$PROFILE" 2>/dev/null | sed -E 's/^system-([0-9]+)-link$/\1/' || true; }
 running() { readlink -f /run/current-system; }
+built_from() { nixos-version --configuration-revision 2>/dev/null || true; }
 trial_path() { cat /run/osctl/pending 2>/dev/null || true; }
 trial_boot() { cat /var/lib/osctl/pending-boot 2>/dev/null || true; }
 nothing_pending() { [ -z "$(trial_path)" ] && [ -z "$(trial_boot)" ]; }
@@ -44,29 +48,40 @@ check_repo() {
   mkdir -p "$STATE"
 }
 
-# Flakes only see files git knows about, so stage everything before building.
-build_attr() {
+# Build ATTR from the work tree, or from exactly COMMIT, so that the system records the
+# commit it was built from. Flakes only see files git knows about, so stage everything.
+build_attr() { # ATTR [COMMIT]
+  local src=$REPO
   check_repo
   git_ add -A
-  nix build "$REPO#nixosConfigurations.$HOST.config.system.build.$1" \
+  [ -z "${2:-}" ] || src="git+file://$REPO?rev=$2"
+  nix build "$src#nixosConfigurations.$HOST.config.system.build.$1" \
     --out-link "$STATE/$1" --print-out-paths
 }
 
-# Commit an exact tree on top of HEAD; later edits stay uncommitted in the work tree.
-commit_tree() {
+# A commit of an exact tree on top of HEAD; later edits stay uncommitted in the work tree.
+new_commit() {
   local tree=$1 msg=$2
-  [ "$tree" != "$(git_ rev-parse 'HEAD^{tree}')" ] || return 0
   if [ -z "$(git_ config user.email || true)" ]; then
     git_ config user.name "${USER:-llm-machine}"
     git_ config user.email "${USER:-root}@$HOST"
   fi
-  git_ update-ref HEAD "$(git_ commit-tree "$tree" -p HEAD -m "$msg")"
+  git_ commit-tree "$tree" -p HEAD -m "$msg"
+}
+
+commit_tree() {
+  local tree=$1 msg=$2
+  [ "$tree" != "$(git_ rev-parse 'HEAD^{tree}')" ] || return 0
+  git_ update-ref HEAD "$(new_commit "$tree" "$msg")"
 }
 
 cmd_status() {
-  local brief=${1:-} gen rev
+  local brief=${1:-} gen rev short
   gen=$(current_gen)
-  rev=$(nixos-version --configuration-revision 2>/dev/null || true)
+  rev=$(built_from)
+  if short=$(git_ rev-parse -q --verify --short "$rev^{commit}" 2>/dev/null); then
+    rev="commit $short"
+  fi
   echo "Host $HOST, repo $REPO"
   echo "Running generation ${gen:-none} (built from ${rev:-an unknown revision})"
 
@@ -75,12 +90,12 @@ cmd_status() {
   boot=$(trial_boot)
   if [ -n "$sys" ]; then
     local left=$(($(cat /run/osctl/deadline) - $(date +%s)))
-    echo "ON TRIAL: a change is active and will be reverted in ${left}s. Keep it with 'osctl confirm -m ...', undo with 'osctl revert'."
+    echo "ON TRIAL: a change is active and will be reverted in ${left}s. Keep it with 'osctl confirm', undo with 'osctl revert'."
   elif [ -n "$boot" ]; then
     local prev new
     read -r prev new <<<"$boot"
     if [ "$(readlink -f /run/booted-system)" = "$(readlink -f "$PROFILE-$new-link")" ]; then
-      echo "ON TRIAL: booted generation $new once. Keep it with 'osctl confirm -m ...'; rebooting without confirming goes back to $prev."
+      echo "ON TRIAL: booted generation $new once. Keep it with 'osctl confirm'; rebooting without confirming goes back to $prev."
     else
       echo "ON TRIAL: generation $new is waiting for its trial boot. Reboot to try it, or 'osctl revert' to drop it."
     fi
@@ -124,9 +139,13 @@ cmd_diff() {
 }
 
 cmd_try() {
-  local timeout=$DEFAULT_TIMEOUT reboot=no
+  local timeout=$DEFAULT_TIMEOUT reboot=no msg=""
   while [ $# -gt 0 ]; do
     case "$1" in
+      -m | --message)
+        msg=${2:?}
+        shift 2
+        ;;
       -t | --timeout)
         timeout=${2:?}
         shift 2
@@ -138,22 +157,30 @@ cmd_try() {
       *) die "try: unknown option $1" ;;
     esac
   done
+  [ -n "$msg" ] || die "try: say in plain words what the change does, with -m \"...\""
   nothing_pending || die "a change is already on trial: 'osctl confirm' or 'osctl revert' it first"
 
-  local out
-  out=$(build_attr toplevel)
-  if [ "$out" = "$(running)" ]; then
-    echo "The repo builds the running system: there is nothing to apply."
+  check_repo
+  git_ add -A
+  local tree commit out
+  tree=$(git_ write-tree)
+  if [ "$tree" = "$(git_ rev-parse -q --verify "$(built_from)^{tree}" 2>/dev/null || true)" ]; then
+    echo "The running system was built from these very files: there is nothing to apply."
     return 0
   fi
-  git_ write-tree > "$STATE/trial-tree"
+  # Commit the change now, beside the branch rather than on it, and build from that
+  # commit, so the system records which commit it is. 'osctl confirm' moves main onto it.
+  commit=$(git_ rev-parse HEAD)
+  [ "$tree" = "$(git_ rev-parse 'HEAD^{tree}')" ] || commit=$(new_commit "$tree" "$msg")
+  git_ update-ref "$TRIAL" "$commit"
+  out=$(build_attr toplevel "$commit")
 
   if [ "$reboot" = yes ]; then
     local gen
     gen=$("${ROOT[@]}" try-boot "$out")
     cat <<EOF
 Rebooting in 5 seconds into $gen, once.
-After the reboot, keep it with: osctl confirm -m "<what changed>"
+After the reboot, keep it with: osctl confirm
 If it does not work, just reboot (or power off and on): the machine comes back on the previous generation.
 EOF
     return 0
@@ -162,39 +189,36 @@ EOF
   local rc=0
   "${ROOT[@]}" try "$out" "$timeout" || rc=$?
   if [ "$rc" != 0 ] && [ "$rc" != 4 ]; then
-    rm -f "$STATE/trial-tree"
+    git_ update-ref -d "$TRIAL"
     die "the change could not be activated and was reverted"
   fi
   cat <<EOF
 Applied on trial. It will be reverted automatically in ${timeout}s.
-  keep it:  osctl confirm -m "<what changed>"
+  keep it:  osctl confirm
   undo now: osctl revert
 EOF
   return "$rc"
 }
 
 cmd_confirm() {
-  local msg=""
-  while [ $# -gt 0 ]; do
-    case "$1" in
-      -m | --message)
-        msg=${2:?}
-        shift 2
-        ;;
-      *) die "confirm: unknown option $1" ;;
-    esac
-  done
+  [ $# -eq 0 ] || die "confirm takes no options: the change was described by 'osctl try -m'"
   ! nothing_pending || die "nothing is on trial"
   check_repo
 
   local rc=0
   "${ROOT[@]}" confirm >/dev/null || rc=$?
-  local gen tree
+  local gen trial
   gen=$(current_gen)
-  tree=$(cat "$STATE/trial-tree" 2>/dev/null || git_ write-tree)
-  commit_tree "$tree" "${msg:-Generation $gen}"
+  trial=$(git_ rev-parse -q --verify "$TRIAL" || git_ rev-parse HEAD)
+  # main normally moves onto the very commit the system was built from. If main moved on
+  # during the trial, the same files are committed on top of it instead.
+  if [ "$(git_ rev-parse -q --verify "$trial^" || true)" = "$(git_ rev-parse HEAD)" ]; then
+    git_ update-ref HEAD "$trial"
+  else
+    commit_tree "$(git_ rev-parse "$trial^{tree}")" "$(git_ log -1 --format=%B "$trial")"
+  fi
+  git_ update-ref -d "$TRIAL"
   git_ tag -f "gen-$gen" >/dev/null
-  rm -f "$STATE/trial-tree"
   echo "Kept as generation $gen (commit $(git_ rev-parse --short HEAD))."
   return "$rc"
 }
@@ -205,7 +229,7 @@ cmd_revert() {
     return 0
   }
   "${ROOT[@]}" revert
-  rm -f "$STATE/trial-tree"
+  git_ update-ref -d "$TRIAL"
   echo "The repo edits are still there, uncommitted: fix them and try again, or set them aside with 'git -C $REPO stash'."
 }
 
