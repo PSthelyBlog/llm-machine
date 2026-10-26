@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "permissions": {
+    "allow": [
+      "Bash(osctl status *)",
+      "Bash(osctl build *)",
+      "Bash(osctl diff *)",
+      "Bash(osctl vm --check *)",
+      "Bash(osctl log *)",
+      "Bash(osctl revert *)",
+      "Bash(nix eval *)",
+      "Bash(nix search *)",
+      "Bash(nix flake metadata *)",
+      "Bash(nixos-option *)",
+      "Bash(lspci *)",
+      "Bash(lsusb *)",
+      "Bash(lsblk *)",
+      "Bash(lscpu *)",
+      "Bash(lshw *)",
+      "Bash(inxi *)",
+      "Bash(journalctl *)",
+      "Bash(systemctl status *)",
+      "Bash(systemctl --failed *)",
+      "Bash(fwupdmgr get-devices *)",
+      "Bash(fwupdmgr get-updates *)",
+      "Bash(nmcli device *)",
+      "Bash(nmcli connection show *)",
+      "Bash(localectl *)",
+      "Bash(timedatectl status *)",
+      "Bash(git add *)",
+      "Edit(/features/**)",
+      "Edit(/hosts/**)",
+      "Edit(/.claude/skills/**)"
+    ],
+    "ask": [
+      "Bash(osctl try *)",
+      "Bash(osctl confirm *)",
+      "Bash(osctl rollback *)",
+      "Edit(/core/**)",
+      "Edit(/CLAUDE.md)"
+    ]
+  },
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "osctl status --brief"
+          }
+        ]
+      }
+    ]
+  }
+}

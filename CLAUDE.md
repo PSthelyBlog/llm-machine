@@ -1,0 +1,35 @@
+# llm-machine (development repo)
+
+An operating system that Claude Code builds and maintains: NixOS underneath, Claude as
+the administrator, `osctl` as the only way the system changes.
+
+`system/` is what ships. On an installed machine it becomes `/etc/llm-machine`, a flake
+the running system is built from. `system/CLAUDE.md` and `system/.claude/` are
+instructions for Claude **running on that machine**. They don't apply to development
+sessions here, so don't follow them (for example, sudo is fine on the dev host).
+
+## Layout
+
+- `system/core/`: base modules (osctl, tty1 session, Claude Code policy, repo seeding)
+  and the scripts in `system/core/pkgs/`.
+- `system/features/`: empty on purpose; Claude fills it in on each machine.
+- `system/hosts/llm-vm/`: the development VM. The installer drops it from installed systems.
+- `installer/`: the ISO and `llm-install`.
+- `dev/`: QEMU runners and `qmp.py` for screenshots and typing into a VM.
+
+## Commands
+
+- `nix build .#iso`: installer ISO in `result/iso/`.
+- `nix run .#vm -- [--reset] [--headless]`: boot `llm-vm` from the build.
+  `ssh -p 2222 dev@localhost`, password `dev`.
+- `nix run .#iso-vm -- [--reset] [--disk-only] [--headless]`: UEFI install onto
+  `.vm/install.qcow2`.
+- `python3 dev/qmp.py .vm/qmp-vm.sock screenshot /tmp/s.png`, `... type 'text\n'`, `... key ctrl-alt-f2`.
+
+## Notes
+
+- Flakes only see git-tracked files: `git add` new files before building.
+- `system/flake.lock` pins nixpkgs for everything; the root flake reuses
+  `machine.inputs.nixpkgs`. Update with `nix flake update --flake ./system`, then
+  `nix flake update machine`.
+- Shell scripts are built with `writeShellApplication`, so shellcheck runs on every build.

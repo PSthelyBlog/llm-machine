@@ -1,0 +1,205 @@
+# llm-install: put llm-machine on this computer's disk. Everything after the first boot
+# (drivers, language, desktop, apps) is Claude's job, so this only asks what it must:
+# keyboard, network, disk, account.
+
+SRC=/etc/llm-machine-source
+MNT=/mnt
+LOG=/tmp/llm-install.log
+KEYFILE=/tmp/llm-machine-disk.key
+
+title() {
+  clear
+  gum style --border rounded --padding "1 3" --margin "1 2" --border-foreground 173 \
+    "llm-machine installer" "$@"
+}
+say() { gum style --margin "0 2" "$@"; }
+fail() {
+  gum style --margin "1 2" --foreground 1 "Installation failed: $*" \
+    "Details are in $LOG. To start again: sudo llm-install"
+  exit 1
+}
+
+trap 'fail "unexpected error at line $LINENO"' ERR
+[ "$(id -u)" = 0 ] || fail "run it as root: sudo llm-install"
+[ -d /sys/firmware/efi ] || fail "this computer did not start in UEFI mode, which llm-machine needs. Switch the firmware to UEFI and start again."
+
+# --- Keyboard ----------------------------------------------------------------------
+
+declare -A KEYMAPS=(
+  ["English (US)"]=us ["English (UK)"]=uk ["French"]=fr ["German"]=de ["Spanish"]=es
+  ["Italian"]=it ["Portuguese"]=pt-latin1 ["Brazilian (ABNT2)"]=br-abnt2
+  ["Belgian"]=be-latin1 ["Swiss French"]=fr_CH ["Swiss German"]=de_CH-latin1
+  ["Canadian French"]=cf ["Dutch"]=nl ["Swedish"]=sv-latin1 ["Norwegian"]=no
+  ["Danish"]=dk ["Finnish"]="fi" ["Polish"]=pl ["Russian"]=ru ["Japanese"]=jp106
+  ["English (US, Dvorak)"]=dvorak ["English (US, Colemak)"]=colemak
+)
+
+title "This puts llm-machine on this computer. It takes a few minutes; after a" \
+  "restart, Claude takes over and sets up the rest with you."
+say "Which keyboard layout do you use?"
+keyboard=$(printf '%s\n' "${!KEYMAPS[@]}" | sort | gum choose --height 12 --selected "English (US)")
+keymap=${KEYMAPS[$keyboard]}
+loadkeys "$keymap"
+
+# --- Network -----------------------------------------------------------------------
+
+online() { curl -fs -o /dev/null -m 5 https://cache.nixos.org/nix-cache-info; }
+until online; do
+  title "No internet connection"
+  say "The installer downloads the system, and Claude needs the internet." \
+    "Plug in a cable, or choose a Wi-Fi network in the next screen and then Quit."
+  if gum confirm "Open the network settings?" --affirmative "Open" --negative "Retry"; then
+    nmtui connect || true
+  fi
+done
+
+# --- Disk --------------------------------------------------------------------------
+
+stable_path() { # prefer a /dev/disk/by-id name: /dev/sdX can change between boots
+  local link
+  for link in /dev/disk/by-id/*; do
+    case "$link" in *-part[0-9]* | */wwn-* | */nvme-eui.*) continue ;; esac
+    if [ "$(readlink -f "$link")" = "$1" ]; then
+      echo "$link"
+      return
+    fi
+  done
+  echo "$1"
+}
+
+iso_disk=$(lsblk -no PKNAME "$(findmnt -no SOURCE /iso 2>/dev/null || echo none)" 2>/dev/null || true)
+mapfile -t disks < <(lsblk -dnpo NAME,TYPE,RO,SIZE,MODEL | awk -v skip="/dev/$iso_disk" \
+  '$2 == "disk" && $3 == 0 && $1 != skip && $1 !~ /zram|loop/ { $2 = $3 = ""; print }')
+[ "${#disks[@]}" -gt 0 ] || fail "no disk to install to was found"
+
+title "Which disk should llm-machine use?"
+say "Everything on it will be erased."
+disk=$(printf '%s\n' "${disks[@]}" | gum choose | awk '{ print $1 }')
+[ -n "$disk" ] || fail "no disk was chosen; nothing was changed"
+
+title "Erase $disk?"
+say "$(lsblk -po NAME,SIZE,FSTYPE,LABEL,MOUNTPOINTS "$disk")" "" \
+  "Everything on this disk will be lost. Type ERASE to continue."
+if [ "$(gum input --placeholder ERASE)" != ERASE ]; then
+  say "Nothing was changed."
+  sleep 2
+  exec "$0"
+fi
+
+layout=btrfs
+if gum confirm "Encrypt the disk? Recommended for laptops: you type a passphrase every time the computer starts."; then
+  layout=btrfs-luks
+  while true; do
+    p1=$(gum input --password --placeholder "Disk passphrase")
+    p2=$(gum input --password --placeholder "The same passphrase again")
+    [ -n "$p1" ] && [ "$p1" = "$p2" ] && break
+    say "The passphrases were empty or didn't match. Try again."
+  done
+  (umask 077 && printf '%s' "$p1" > "$KEYFILE")
+fi
+
+# --- Account -----------------------------------------------------------------------
+
+title "Your account"
+fullname=$(gum input --placeholder "Your name" | tr -d '"\\$')
+username=$(echo "$fullname" | awk '{ print tolower($1) }' | tr -cd 'a-z0-9_-')
+while true; do
+  username=$(gum input --value "$username" --placeholder "Username (lowercase, no spaces)")
+  [[ "$username" =~ ^[a-z_][a-z0-9_-]{0,31}$ ]] && [[ ! "$username" =~ ^(root|nixos|dev)$ ]] && break
+  say "Use lowercase letters, digits, - or _, starting with a letter."
+done
+while true; do
+  password=$(gum input --password --placeholder "Password")
+  again=$(gum input --password --placeholder "The same password again")
+  [ -n "$password" ] && [ "$password" = "$again" ] && break
+  say "The passwords were empty or didn't match. Try again."
+done
+hostname=llm-machine
+while true; do
+  hostname=$(gum input --value "$hostname" --placeholder "Name of this computer")
+  [[ "$hostname" =~ ^[a-zA-Z0-9][a-zA-Z0-9-]{0,62}$ ]] && [ "$hostname" != llm-vm ] && break
+  say "Use letters, digits and -, starting with a letter or digit."
+done
+
+# --- Confirm -----------------------------------------------------------------------
+
+title "Ready to install"
+say "Disk:      $disk, erased$([ "$layout" = btrfs ] || echo ", encrypted")" \
+  "Keyboard:  $keyboard" \
+  "Account:   $fullname ($username)" \
+  "Computer:  $hostname"
+gum confirm "Install now?" || exec "$0"
+
+# --- Install -----------------------------------------------------------------------
+
+exec > >(tee -a "$LOG") 2>&1
+repo=$MNT/etc/llm-machine
+hostdir=$repo/hosts/$hostname
+
+say "Partitioning and formatting $disk..."
+sed "s|@DEVICE@|$(stable_path "$disk")|" "$SRC/core/disko/$layout.nix" > /tmp/disk.nix
+disko --mode destroy,format,mount --yes-wipe-all-disks /tmp/disk.nix || fail "formatting the disk"
+[ ! -e "$KEYFILE" ] || shred -u "$KEYFILE"
+
+say "Writing the system description to /etc/llm-machine..."
+mkdir -p "$repo"
+cp -r "$SRC/." "$repo" # $SRC is a symlink into the store: copy what it points to
+chmod -R u+w "$repo"
+rm -rf "$repo/hosts/llm-vm"
+mkdir -p "$hostdir"
+cp /tmp/disk.nix "$hostdir/disk.nix"
+nixos-generate-config --root "$MNT" --no-filesystems --show-hardware-config > "$hostdir/hardware-configuration.nix"
+early_setup=""
+[ "$layout" = btrfs ] || early_setup='
+  console.earlySetup = true; # the disk passphrase is typed with this layout'
+cat > "$hostdir/default.nix" <<EOF
+# This machine. The installer wrote this file; Claude looks after it.
+{ ... }:
+{
+  imports = [
+    ./hardware-configuration.nix
+    ./disk.nix
+  ];
+
+  llm-machine.user = "$username";
+  users.users."$username".description = "$fullname";
+
+  console.keyMap = "$keymap";$early_setup
+
+  boot.loader.systemd-boot.enable = true;
+  boot.loader.efi.canTouchEfiVariables = true;
+
+  # The NixOS release this machine was installed with. Don't change it.
+  system.stateVersion = "$(nixos-version | cut -d. -f1,2)";
+}
+EOF
+git -C "$repo" init -q -b main
+git -C "$repo" config user.name "$fullname"
+git -C "$repo" config user.email "$username@$hostname"
+git -C "$repo" add -A
+git -C "$repo" commit -q -m "Install $hostname"
+
+say "Installing. This downloads the system and can take a while..."
+nixos-install --root "$MNT" --flake "$repo#$hostname" --no-root-passwd --no-channel-copy ||
+  fail "installing the system"
+
+printf '%s:%s\n' "$username" "$password" | nixos-enter --root "$MNT" -c chpasswd ||
+  fail "setting the password"
+
+# Bring the Wi-Fi networks along, so the first boot is online.
+connections=(/etc/NetworkManager/system-connections/*)
+if [ -e "${connections[0]}" ]; then
+  install -d -m 700 "$MNT/etc/NetworkManager/system-connections"
+  install -m 600 /etc/NetworkManager/system-connections/* "$MNT/etc/NetworkManager/system-connections/"
+fi
+
+gen=$(readlink "$MNT/nix/var/nix/profiles/system" | sed -E 's/^system-([0-9]+)-link$/\1/')
+git -C "$repo" tag "gen-$gen"
+chown -R 1000:100 "$repo"
+
+title "llm-machine is installed."
+say "Remove the installation USB stick, then press Enter to restart." \
+  "After the restart, Claude will greet you."
+read -r _
+umount -R "$MNT" || true
+reboot
