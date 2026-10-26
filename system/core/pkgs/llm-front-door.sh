@@ -13,6 +13,24 @@ has_conversation() {
   [ -e "${saved[0]}" ]
 }
 
+# Answer what Claude Code asks on its first start, in ~/.claude.json: its onboarding
+# (a theme and security notes; sign-in is already done), whether to trust this folder
+# (the machine's own repo), and the notice that auto mode is the default (the machine's
+# policy).
+answer_first_start() {
+  local config=$HOME/.claude.json repo
+  repo=$(pwd -P)
+  [ -s "$config" ] || echo '{}' > "$config"
+  # shellcheck disable=SC2016 # $repo is jq's, passed with --arg
+  local answers='.hasCompletedOnboarding = true
+    | .projects[$repo].hasTrustDialogAccepted = true
+    | .hasSeenAutoDefaultNotice = true'
+  if ! jq -e --arg repo "$repo" "($answers) == ." "$config" > /dev/null; then
+    (umask 077 && jq --arg repo "$repo" "$answers" "$config" > "$config.new")
+    mv "$config.new" "$config"
+  fi
+}
+
 banner() {
   clear
   cat <<'EOF'
@@ -36,16 +54,30 @@ while true; do
     banner
   done
 
-  watcher=""
-  if ! signed_in && [ -n "${TMUX:-}" ]; then
-    echo "   Next, sign in to Claude. A QR code appears for your phone: scan it and follow"
-    echo "   the steps there. (F4 shows the QR code again.)"
-    sleep 4
-    llm-login-qr --watch &
-    watcher=$!
+  # Sign in before Claude starts: 'claude auth login' asks only for the code from the
+  # sign-in page (for a Claude subscription; /login in Claude offers the others).
+  if ! signed_in; then
+    watcher=""
+    if [ -n "${TMUX:-}" ]; then
+      echo "   Next, sign in to Claude. A QR code appears for your phone: scan it and follow"
+      echo "   the steps there. (F4 shows the QR code again.)"
+      sleep 4
+      llm-login-qr --watch &
+      watcher=$!
+    fi
+    until claude auth login; do
+      echo
+      echo "   Signing in didn't work. Starting again..."
+      sleep 3
+    done
+    [ -z "$watcher" ] || kill "$watcher" 2>/dev/null || true
   fi
 
-  cd "$REPO" 2>/dev/null || cd "$HOME"
+  if cd "$REPO" 2>/dev/null; then
+    answer_first_start
+  else
+    cd "$HOME" || exit 1
+  fi
   mkdir -p "$STATE"
   # Carry on with the last conversation, unless there is none yet: the computer can
   # restart before Claude has saved anything, for example during sign-in.
@@ -58,7 +90,6 @@ while true; do
   else
     claude "${resume[@]}" "/setup" || true
   fi
-  [ -z "$watcher" ] || kill "$watcher" 2>/dev/null || true
 
   echo
   echo "   Claude has exited. Press Enter to start it again, or F2 for a shell."

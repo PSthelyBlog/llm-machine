@@ -27,6 +27,7 @@ let
 
   front-door = script "llm-front-door" [
     pkgs.curl
+    pkgs.jq
     pkgs.networkmanager
     pkgs.tmux
     login-qr

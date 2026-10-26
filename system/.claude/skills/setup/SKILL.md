@@ -84,7 +84,9 @@ check something concrete (`date` shows the right time), then `osctl confirm`.
   after the reboot.
   - GNOME: `services.displayManager.gdm.enable = true;`,
     `services.desktopManager.gnome.enable = true;`,
-    `llm-machine.session.terminal = "kgx --";`
+    `llm-machine.session.terminal = "kgx --";`, and
+    `environment.gnome.excludePackages = [ pkgs.gnome-tour ];` so GNOME's welcome tour
+    doesn't cover your terminal on the first login.
   - KDE Plasma: `services.displayManager.sddm = { enable = true; wayland.enable = true; };`,
     `services.desktopManager.plasma6.enable = true;`,
     `llm-machine.session.terminal = "konsole -e";`

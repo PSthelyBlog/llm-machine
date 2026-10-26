@@ -6,9 +6,10 @@ An operating system that Claude Code sets up and maintains.
 firmware → systemd-boot (every generation listed: rollback without Claude)
   → NixOS → autologin on tty1 → tmux: F1 Claude │ F2 shell │ F3 network │ F4 sign-in QR
        ├─ offline?          → network settings (nmtui)
-       ├─ not signed in?    → Claude's login: a QR code opens a page on the phone that
+       ├─ not signed in?    → claude auth login: a QR code opens a page on the phone that
        │                      hands the sign-in code back, so nothing has to be typed
-       ├─ first boot?       → claude "/setup": hardware survey, a few questions, then
+       ├─ first boot?       → claude "/setup" (Claude Code's own first-start screens are
+       │                      answered already): hardware survey, a few questions, then
        │                      drivers, language, desktop and apps, each applied on trial
        └─ afterwards        → ask Claude for anything; it edits the system repo
 ```
