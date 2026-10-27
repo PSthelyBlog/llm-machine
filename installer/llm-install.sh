@@ -13,9 +13,12 @@ title() {
     "llm-machine installer" "$@"
 }
 say() { gum style --margin "0 2" "$@"; }
+# Drop keys pressed while nothing was asked, so they don't answer the next question.
+drop_typed() { while read -r -s -t 0.1 -N 1 _; do :; done; }
 fail() {
   gum style --margin "1 2" --foreground 1 "Installation failed: $*" \
     "Details are in $LOG. To start again: sudo llm-install"
+  drop_typed # or run as a command in the shell after this
   exit 1
 }
 
@@ -143,6 +146,12 @@ gum confirm "Install now?" || exec "$0"
 
 # --- Install -----------------------------------------------------------------------
 
+# Nothing is asked again until the end, so keys pressed meanwhile aren't shown, and the
+# end drops them. Typing shows again once the installer exits, even after a failure.
+tty_state=$(stty -g 2> /dev/null || true)
+trap '[ -z "$tty_state" ] || stty "$tty_state" 2> /dev/null || true' EXIT
+stty -echo 2> /dev/null || true
+
 # The screen says what is happening; what the tools print goes to the log.
 step() {
   echo "== $1" >> "$LOG"
@@ -241,6 +250,8 @@ chown -R 1000:100 "$repo"
 title "llm-machine is installed."
 say "Remove the installation USB stick, then press Enter to restart." \
   "After the restart, Claude will greet you."
+# An Enter pressed during the install would restart right away, with the stick still in.
+drop_typed
 read -r _
 umount -R "$MNT" || true
 reboot
