@@ -39,19 +39,30 @@ otherwise. `llm-machine.session.phoneSignIn = false` turns it off.
 
 ## Try it
 
-Needs Nix with flakes, and KVM.
+Needs Nix with flakes, and KVM. The `stable` branch is the latest release; `main` is
+where development happens.
 
 ```sh
-nix run .#vm                 # boot the dev machine straight from the build
-nix run .#iso-vm             # or the real path: UEFI install from the ISO onto a blank disk,
+git clone -b stable https://github.com/PSthelyBlog/llm-machine
+cd llm-machine
+nix run .#iso-vm                  # UEFI install from the ISO onto a blank disk in a VM,
 nix run .#iso-vm -- --disk-only   # then boot the installed system
-nix build .#iso              # the installer image, in result/iso/
-nix flake check              # osctl and session tests in VMs
-nix run .#check-gates        # with your signed-in Claude: osctl still asks in auto mode
+nix build .#iso                   # the installer image, in result/iso/
 ```
 
 The installer asks only for keyboard, network, disk (optionally encrypted) and account.
 Claude Code itself is fetched from Anthropic at install time and isn't part of the ISO.
+The VM's disk is kept in `.vm/`. Its sign-in QR code points at the VM's own address,
+which a phone can't reach: open the address printed under the code on this computer
+instead, with `localhost` in place of `10.0.2.15`.
+
+For development, clone `main`:
+
+```sh
+nix run .#vm                 # boot the dev machine straight from the build
+nix flake check              # osctl and session tests in VMs
+nix run .#check-gates        # with your signed-in Claude: osctl still asks in auto mode
+```
 
 ## Layout
 
