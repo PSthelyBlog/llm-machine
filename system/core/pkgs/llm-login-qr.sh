@@ -98,6 +98,7 @@ case "${1:-}" in
       code=${code//[[:space:]]/}
       if [ -n "$code" ]; then
         state=${url##*state=}
+        tmux send-keys -t main:claude -X cancel 2> /dev/null || true # leave any copy mode
         tmux send-keys -t main:claude -l "$code#${state%%&*}"
         sleep 0.5
         tmux send-keys -t main:claude Enter

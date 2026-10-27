@@ -54,6 +54,13 @@ pkgs.testers.runNixOSTest {
         assert http(f"-d code=+def456+ {address}") == "200"
         machine.wait_until_succeeds(f"grep -qx 'def456#{state}' /tmp/typed")
 
+    with subtest("a code still reaches Claude's window when the window is in copy mode"):
+        # In copy mode, keys are commands: the code's 'g' opened a prompt that took the
+        # rest of it (on a machine, the phone page kept loading).
+        machine.succeed("su - dev -c 'tmux copy-mode -t main:claude'")
+        assert http(f"-m 10 -d code=go123%23{state} {address}") == "200"
+        machine.wait_until_succeeds(f"grep -qx 'go123#{state}' /tmp/typed", timeout=10)
+
     with subtest("the secret address goes away with the relay"):
         machine.succeed("pkill -TERM -f '[l]lm-login-relay'")
         machine.wait_until_fails("test -e /tmp/relay")

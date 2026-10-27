@@ -78,6 +78,9 @@ def hand_over(code):
         subprocess.run(["tmux", *args], check=False, capture_output=True)
 
     tmux("display-popup", "-C", "-t", "main")
+    # A window in copy or view mode would take the code as commands (its 'g' opens a
+    # prompt that blocks tmux), so leave any mode first.
+    tmux("send-keys", "-t", "main:claude", "-X", "cancel")
     tmux("send-keys", "-t", "main:claude", "-l", code)
     time.sleep(0.5)  # let Claude take the text in before Enter submits it
     tmux("send-keys", "-t", "main:claude", "Enter")
