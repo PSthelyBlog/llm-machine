@@ -41,6 +41,23 @@ die() {
 git_() { git -C "$REPO" "$@"; }
 current_gen() { readlink "$PROFILE" 2>/dev/null | sed -E 's/^system-([0-9]+)-link$/\1/' || true; }
 running() { readlink -f /run/current-system; }
+# The generation that is running, which isn't always the profile's: a change on trial is
+# none yet, and a reboot trial adds its generation before it is booted.
+running_gen() {
+  local sys gen link
+  sys=$(running)
+  gen=$(current_gen)
+  if [ -n "$gen" ] && [ "$(readlink -f "$PROFILE-$gen-link")" = "$sys" ]; then
+    echo "$gen"
+    return
+  fi
+  for link in $(printf '%s\n' "$PROFILE"-*-link | sort -t- -k2 -nr); do
+    [ "$(readlink -f "$link")" = "$sys" ] || continue
+    gen=${link#"$PROFILE"-}
+    echo "${gen%-link}"
+    return
+  done
+}
 built_from() { nixos-version --configuration-revision 2>/dev/null || true; }
 trial_path() { cat /run/osctl/pending 2>/dev/null || true; }
 trial_boot() { cat /var/lib/osctl/pending-boot 2>/dev/null || true; }
@@ -110,16 +127,22 @@ commit_tree() {
 
 cmd_status() {
   local brief=${1:-} gen rev short
-  gen=$(current_gen)
+  gen=$(running_gen)
   rev=$(built_from)
   if short=$(git_ rev-parse -q --verify --short "$rev^{commit}" 2>/dev/null); then
     rev="commit $short"
   fi
-  echo "Host $HOST, repo $REPO"
-  echo "Running generation ${gen:-none} (built from ${rev:-an unknown revision})"
-
   local sys boot
   sys=$(trial_path)
+  echo "Host $HOST, repo $REPO"
+  if [ -n "$gen" ]; then
+    echo "Running generation $gen (built from ${rev:-an unknown revision})"
+  elif [ -n "$sys" ]; then
+    echo "Running the change on trial (built from ${rev:-an unknown revision}); the last kept generation is $(current_gen)."
+  else
+    echo "Running a system that isn't one of the generations (built from ${rev:-an unknown revision})"
+  fi
+
   boot=$(trial_boot)
   if [ -n "$sys" ]; then
     local left=$(($(cat /run/osctl/deadline) - $(date +%s)))

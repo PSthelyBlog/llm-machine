@@ -30,6 +30,13 @@ pkgs.testers.runNixOSTest {
     feature = machine.succeed("readlink -f /run/current-system/specialisation/feature").strip()
     machine.succeed(f"nix-env -p /nix/var/nix/profiles/system --set {base}")
 
+    def running():
+        # What 'osctl status' says is running.
+        return machine.succeed("su - dev -c 'osctl status --brief' | grep '^Running'").strip()
+
+    def kept():
+        return machine.succeed("readlink /nix/var/nix/profiles/system").split("-")[1]
+
     with subtest("a change on trial is reverted when the timer runs out"):
         machine.succeed(f"osctl-root try {feature} 10")
         machine.succeed("test -e /etc/osctl-test")
@@ -48,12 +55,17 @@ pkgs.testers.runNixOSTest {
         machine.succeed(f"osctl-root try {feature} 300")
         machine.fail(f"osctl-root try {feature} 300")
 
+    with subtest("status doesn't call a change on trial the kept generation"):
+        assert running().startswith("Running the change on trial"), running()
+        assert running().endswith(f"the last kept generation is {kept()}."), running()
+
     with subtest("a confirmed change stays and becomes the new generation"):
         machine.succeed("osctl-root confirm")
         machine.fail("systemctl is-active osctl-revert.timer")
         machine.sleep(5)
         machine.succeed("test -e /etc/osctl-test")
         assert machine.succeed("readlink -f /nix/var/nix/profiles/system").strip() == feature
+        assert running().startswith(f"Running generation {kept()} "), running()
 
     with subtest("rollback returns to the previous generation"):
         machine.succeed("osctl-root rollback")
