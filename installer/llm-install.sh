@@ -143,16 +143,32 @@ gum confirm "Install now?" || exec "$0"
 
 # --- Install -----------------------------------------------------------------------
 
-exec > >(tee -a "$LOG") 2>&1
+# The screen says what is happening; what the tools print goes to the log.
+step() {
+  echo "== $1" >> "$LOG"
+  say "$1"
+}
+# A step that runs COMMAND, with a spinner while it does.
+spin() {
+  local title=$1 pid
+  shift
+  echo "== $title" >> "$LOG"
+  "$@" >> "$LOG" 2>&1 &
+  pid=$!
+  gum spin --spinner line --title "$title" -- tail --pid "$pid" -s 0.2 -f /dev/null
+  wait "$pid" || return
+  say "$title"
+}
+
 repo=$MNT/etc/llm-machine
 hostdir=$repo/hosts/$hostname
 
-say "Partitioning and formatting $disk..."
 sed "s|@DEVICE@|$(stable_path "$disk")|" "$SRC/core/disko/$layout.nix" > /tmp/disk.nix
-disko --mode destroy,format,mount --yes-wipe-all-disks /tmp/disk.nix || fail "formatting the disk"
+spin "Partitioning and formatting $disk..." \
+  disko --mode destroy,format,mount --yes-wipe-all-disks /tmp/disk.nix || fail "formatting the disk"
 [ ! -e "$KEYFILE" ] || shred -u "$KEYFILE"
 
-say "Writing the system description to /etc/llm-machine..."
+step "Writing the system description to /etc/llm-machine..."
 mkdir -p "$repo"
 cp -r "$SRC/." "$repo" # $SRC is a symlink into the store: copy what it points to
 chmod -R u+w "$repo"
@@ -167,7 +183,8 @@ git -C "$repo" commit -q -m "llm-machine, as installed"
 git -C "$repo" branch upstream
 mkdir -p "$hostdir"
 cp /tmp/disk.nix "$hostdir/disk.nix"
-nixos-generate-config --root "$MNT" --no-filesystems --show-hardware-config > "$hostdir/hardware-configuration.nix"
+nixos-generate-config --root "$MNT" --no-filesystems --show-hardware-config \
+  > "$hostdir/hardware-configuration.nix" 2>> "$LOG"
 keyboard_config="services.xserver.xkb.layout = \"$xkb_layout\";"
 [ -z "$xkb_variant" ] || keyboard_config+="
   services.xserver.xkb.variant = \"$xkb_variant\";"
@@ -201,11 +218,13 @@ EOF
 git -C "$repo" add -A
 git -C "$repo" commit -q -m "Install $hostname"
 
-say "Installing. This downloads the system and can take a while..."
-nixos-install --root "$MNT" --flake "$repo#$hostname" --no-root-passwd --no-channel-copy ||
-  fail "installing the system"
+step "Installing. This downloads the system and can take a while..."
+# Nix writes to the screen, where it shows one progress line instead of a line for each
+# download. (Its json-log-path record would be hundreds of MB of RAM here.)
+nixos-install --root "$MNT" --flake "$repo#$hostname" --no-root-passwd --no-channel-copy \
+  >> "$LOG" || fail "installing the system; the message above says why"
 
-printf '%s:%s\n' "$username" "$password" | nixos-enter --root "$MNT" -c chpasswd ||
+printf '%s:%s\n' "$username" "$password" | nixos-enter --root "$MNT" -c chpasswd >> "$LOG" 2>&1 ||
   fail "setting the password"
 
 # Bring the Wi-Fi networks along, so the first boot is online.
