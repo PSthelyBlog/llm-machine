@@ -39,6 +39,8 @@ in
     "nix-command"
     "flakes"
   ];
+  # The install builds a few hundred derivations; see core/base.nix for why not Nix 2.34.
+  nix.package = lib.mkIf (lib.versionOlder pkgs.nix.version "2.35") pkgs.nixVersions.nix_2_35;
 
   # The system the installer copies to /mnt/etc/llm-machine, and the flake inputs it
   # needs, so evaluating it doesn't download them again.

@@ -19,6 +19,12 @@ in
     ];
     auto-optimise-store = true;
   };
+  # Nix 2.34 holds memory for each derivation it builds until the whole build is over: a
+  # build of a thousand small packages took the daemon past 2 GB and froze a 4 GB machine.
+  # 2.35 doesn't. This does nothing once nixpkgs' own Nix is 2.35 or newer.
+  nix.package = lib.mkIf (lib.versionOlder pkgs.nix.version "2.35") (
+    lib.mkDefault pkgs.nixVersions.nix_2_35
+  );
 
   # Generations are the rollback history. Keep a month of them; the boot menu shows the last 20.
   nix.gc = {
@@ -31,7 +37,23 @@ in
   networking.networkmanager.enable = true;
   hardware.enableRedistributableFirmware = true;
   services.fwupd.enable = true;
+
+  # A big build may need more memory than the machine has. It is allowed, and slows down
+  # instead of freezing the machine: when memory runs short, the kernel takes it from the
+  # builds (they swap, to disk past zram) and leaves the user's session, Claude and the
+  # desktop, the memory they use. A build is stopped only when the swap is nearly full too.
   zramSwap.enable = true;
+  # Not mkDefault: disko's own swapDevices, even empty, would replace it.
+  swapDevices = lib.mkIf (config.fileSystems."/".fsType or null == "btrfs") [
+    {
+      device = "/var/lib/swapfile";
+      size = 4096; # MiB
+    }
+  ];
+  systemd.slices.user.sliceConfig.MemoryLow = "30%";
+  systemd.slices.system.sliceConfig.ManagedOOMSwap = "kill";
+  nix.daemonCPUSchedPolicy = "batch";
+  nix.daemonIOSchedClass = "idle";
 
   # Lets prebuilt Linux binaries (that expect /lib64/ld-linux.so) run.
   programs.nix-ld.enable = true;
