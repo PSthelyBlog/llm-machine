@@ -61,6 +61,7 @@
       };
 
       checks.x86_64-linux = {
+        memory = import ./tests/memory.nix { inherit pkgs machine; };
         osctl = import ./tests/osctl.nix { inherit pkgs machine; };
         session = import ./tests/session.nix { inherit pkgs machine; };
       };

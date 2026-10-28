@@ -50,7 +50,9 @@ in
       size = 4096; # MiB
     }
   ];
-  systemd.slices.user.sliceConfig.MemoryLow = "30%";
+  # MemoryMin, not MemoryLow: with the kernel's MGLRU page reclaim (on by default), MemoryLow
+  # only makes the kernel take the session's memory last, and it still takes all of it.
+  systemd.slices.user.sliceConfig.MemoryMin = "30%";
   systemd.slices.system.sliceConfig.ManagedOOMSwap = "kill";
   nix.daemonCPUSchedPolicy = "batch";
   nix.daemonIOSchedClass = "idle";
